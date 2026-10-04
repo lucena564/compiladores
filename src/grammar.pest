@@ -1,0 +1,26 @@
+// Sem WHITESPACE implícito: espaços e quebras fazem parte da linguagem.
+document = { SOI ~ blank* ~ contract ~ variables? ~ functions ~ EOI }
+contract = { "contrato:" ~ sp ~ identifier ~ end }
+variables = { "variaveis:" ~ end ~ variable+ }
+variable = { "  " ~ identifier ~ ":" ~ sp ~ kind ~ sp ~ "=" ~ sp ~ value ~ end }
+functions = { "funcoes:" ~ end ~ function+ }
+function = { "  " ~ identifier ~ ":" ~ end ~ return_type? ~ "    passos:" ~ end ~ action+ }
+return_type = { "    retorna:" ~ sp ~ kind ~ end }
+action = { "      - " ~ (assign | add | return_value) ~ end }
+assign = { "definir " ~ identifier ~ " como " ~ value }
+add = { "somar " ~ value ~ " em " ~ identifier }
+return_value = { "retornar " ~ value }
+kind = @{ ("numero" | "texto" | "logico" | "endereco") ~ !ident_char }
+value = _{ string | boolean | number | identifier }
+boolean = @{ ("verdadeiro" | "falso") ~ !ident_char }
+number = @{ ("0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*) ~ !ident_char }
+string = @{ "\"" ~ ("\\" ~ ("\"" | "\\" | "n" | "r" | "t") | !("\"" | "\\" | control) ~ ANY)* ~ "\"" }
+control = _{ '\u{0000}'..'\u{001F}' }
+identifier = @{ !(reserved ~ !ident_char) ~ (ASCII_ALPHA | "_") ~ ident_char* }
+ident_char = _{ ASCII_ALPHANUMERIC | "_" }
+reserved = _{ "contrato" | "variaveis" | "funcoes" | "retorna" | "passos" | "definir" | "como" | "somar" | "em" | "retornar" | "numero" | "texto" | "logico" | "endereco" | "verdadeiro" | "falso" }
+sp = _{ " "+ }
+comment = _{ "#" ~ (!("\n" | "\r") ~ ANY)* }
+newline = _{ "\r\n" | "\n" }
+blank = _{ " "* ~ comment? ~ newline }
+end = _{ " "* ~ comment? ~ newline ~ blank* }

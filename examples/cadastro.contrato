@@ -1,0 +1,13 @@
+contrato: Cadastro
+variaveis:
+  nome: texto = "Gabriel"
+  ativo: logico = falso
+  dono: endereco = "0x0000000000000000000000000000000000000000"
+funcoes:
+  ativar:
+    passos:
+      - definir ativo como verdadeiro
+  consultar:
+    retorna: texto
+    passos:
+      - retornar nome

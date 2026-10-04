@@ -1,0 +1,12 @@
+# Uma linguagem própria com aparência de YAML.
+contrato: Contador
+variaveis:
+  total: numero = 0
+funcoes:
+  incrementar:
+    passos:
+      - somar 1 em total
+  consultar:
+    retorna: numero
+    passos:
+      - retornar total

@@ -1,4 +1,5 @@
 pub mod ast;
+pub mod symbol_table;
 
 use ast::*;
 use pest::{iterators::Pair, Parser};

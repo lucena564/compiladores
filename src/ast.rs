@@ -18,7 +18,7 @@ pub struct Contract {
     pub origem: Span,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Type {
     Numero,

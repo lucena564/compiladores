@@ -2,7 +2,7 @@
 name = "contrato-simples"
 version = "0.1.0"
 edition = "2021"
-description = "Front-end de uma linguagem declarativa para contratos"
+description = "Front-end e middle-end de uma linguagem declarativa para contratos"
 
 [dependencies]
 pest = "2.8"

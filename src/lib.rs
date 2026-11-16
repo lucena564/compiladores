@@ -1,4 +1,5 @@
 pub mod ast;
+pub mod middle;
 pub mod symbol_table;
 pub mod verify;
 
@@ -43,6 +44,76 @@ fn value(pair: Pair<'_, Rule>) -> Value {
     }
 }
 
+fn comparator(pair: Pair<'_, Rule>) -> Comparator {
+    match pair.as_str() {
+        "igual a" => Comparator::Igual,
+        "diferente de" => Comparator::Diferente,
+        "maior que" => Comparator::Maior,
+        "menor que" => Comparator::Menor,
+        "maior ou igual a" => Comparator::MaiorOuIgual,
+        "menor ou igual a" => Comparator::MenorOuIgual,
+        _ => unreachable!("comparador garantido pela gramática"),
+    }
+}
+
+fn operands_name(operands: &mut pest::iterators::Pairs<'_, Rule>) -> String {
+    operands.next().unwrap().as_str().to_owned()
+}
+
+fn command(pair: Pair<'_, Rule>) -> Command {
+    let rule = pair.as_rule();
+    let mut operands = pair.into_inner();
+    match rule {
+        Rule::assign => {
+            let destino = operands_name(&mut operands);
+            Command::Definir {
+                destino,
+                valor: value(operands.next().unwrap()),
+            }
+        }
+        Rule::add => {
+            let valor = value(operands.next().unwrap());
+            Command::Somar {
+                destino: operands_name(&mut operands),
+                valor,
+            }
+        }
+        Rule::subtract => {
+            let valor = value(operands.next().unwrap());
+            Command::Subtrair {
+                destino: operands_name(&mut operands),
+                valor,
+            }
+        }
+        Rule::require => {
+            let esquerda = value(operands.next().unwrap());
+            let condicao = match operands.next() {
+                Some(operador) => Condition::Comparacao {
+                    esquerda,
+                    operador: comparator(operador),
+                    direita: value(operands.next().unwrap()),
+                },
+                None => Condition::Valor { valor: esquerda },
+            };
+            Command::Exigir { condicao }
+        }
+        Rule::transfer => {
+            let valor = value(operands.next().unwrap());
+            Command::Transferir {
+                valor,
+                destino: value(operands.next().unwrap()),
+            }
+        }
+        Rule::transition => Command::MudarEstado {
+            estado: operands_name(&mut operands),
+        },
+        Rule::return_value => Command::Retornar {
+            valor: value(operands.next().unwrap()),
+        },
+        _ => unreachable!("comando garantido pela gramática"),
+    }
+}
+
 /// Reconhece apenas sintaxe. Referências e compatibilidade de tipos ficam para a etapa 2.
 pub fn parse(source: &str) -> Result<Contract, String> {
     // Aceita a última linha sem quebra, sem deslocar os bytes anteriores.
@@ -55,8 +126,9 @@ pub fn parse(source: &str) -> Result<Contract, String> {
         .map_err(|e| format!("Erro de sintaxe:\n{e}"))?;
     let document = parsed.next().expect("documento reconhecido");
     let mut contract = Contract {
-        versao_ast: 1,
+        versao_ast: 2,
         nome: String::new(),
+        estados: Vec::new(),
         variaveis: Vec::new(),
         funcoes: Vec::new(),
         origem: span(&document, source.len()),
@@ -65,6 +137,15 @@ pub fn parse(source: &str) -> Result<Contract, String> {
         match section.as_rule() {
             Rule::contract => {
                 contract.nome = section.into_inner().next().unwrap().as_str().to_owned();
+            }
+            Rule::states => {
+                for state in section.into_inner() {
+                    let origem = span(&state, source.len());
+                    contract.estados.push(State {
+                        nome: state.into_inner().next().unwrap().as_str().to_owned(),
+                        origem,
+                    });
+                }
             }
             Rule::variables => {
                 for variable in section.into_inner() {
@@ -84,37 +165,26 @@ pub fn parse(source: &str) -> Result<Contract, String> {
                     let mut parts = function.into_inner();
                     let mut function = Function {
                         nome: parts.next().unwrap().as_str().to_owned(),
+                        quando: None,
                         retorna: None,
                         passos: Vec::new(),
                         origem,
                     };
                     for part in parts {
-                        if part.as_rule() == Rule::return_type {
-                            function.retorna = Some(kind(part.into_inner().next().unwrap()));
-                            continue;
-                        }
-                        let origem = span(&part, source.len());
-                        let command = part.into_inner().next().unwrap();
-                        let rule = command.as_rule();
-                        let mut operands = command.into_inner();
-                        let comando = match rule {
-                            Rule::assign => Command::Definir {
-                                destino: operands.next().unwrap().as_str().to_owned(),
-                                valor: value(operands.next().unwrap()),
-                            },
-                            Rule::add => {
-                                let valor = value(operands.next().unwrap());
-                                Command::Somar {
-                                    destino: operands.next().unwrap().as_str().to_owned(),
-                                    valor,
-                                }
+                        match part.as_rule() {
+                            Rule::guard => {
+                                function.quando =
+                                    Some(part.into_inner().next().unwrap().as_str().to_owned());
                             }
-                            Rule::return_value => Command::Retornar {
-                                valor: value(operands.next().unwrap()),
-                            },
-                            _ => unreachable!("comando garantido pela gramática"),
-                        };
-                        function.passos.push(Action { comando, origem });
+                            Rule::return_type => {
+                                function.retorna = Some(kind(part.into_inner().next().unwrap()));
+                            }
+                            _ => {
+                                let origem = span(&part, source.len());
+                                let comando = command(part.into_inner().next().unwrap());
+                                function.passos.push(Action { comando, origem });
+                            }
+                        }
                     }
                     contract.funcoes.push(function);
                 }

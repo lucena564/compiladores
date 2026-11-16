@@ -1,0 +1,11 @@
+# Inválido: o saldo só é atualizado depois da transferência (padrão vulnerável).
+contrato: CofreVulneravel
+variaveis:
+  saldo: numero = 1000
+  dono: endereco = "0x1111111111111111111111111111111111111111"
+funcoes:
+  sacar:
+    passos:
+      - exigir saldo maior ou igual a 100
+      - transferir 100 para dono
+      - subtrair 100 de saldo

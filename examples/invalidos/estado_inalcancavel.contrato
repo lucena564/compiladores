@@ -1,0 +1,16 @@
+# Inválido: nenhuma função leva o contrato de Pendente para Pago.
+contrato: Fatura
+estados:
+  - Pendente
+  - Pago
+variaveis:
+  valor: numero = 50
+funcoes:
+  pagar:
+    quando: Pendente
+    passos:
+      - definir valor como 0
+  reembolsar:
+    quando: Pago
+    passos:
+      - definir valor como 50

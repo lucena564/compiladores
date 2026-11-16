@@ -103,6 +103,7 @@ como âncoras, aliases, tags ou estruturas arbitrárias.
 | `tests/` | Testes do front-end, da IR e do middle-end |
 | `docs/etapa-1.md` | Análise, planejamento e limites da etapa 1 |
 | `docs/parte2.md` | Middle-end: passes, regras e decisões da etapa 2 |
+| `docs/fluxo_teste_parte2.md` | Roteiro de teste manual do middle-end |
 
 A aceitação sintática indica conformidade com a estrutura da linguagem. Referências
 inexistentes, declarações duplicadas, incompatibilidades de tipos e violações de

@@ -558,6 +558,10 @@ símbolos e do `verify_ir`, todos da etapa anterior e ainda passando, além de
 
 ## 10. Roteiro de demonstração (para a apresentação)
 
+O passo a passo detalhado, com a instalação do ambiente e alterações para
+quebrar o contrato de propósito, está em
+[fluxo_teste_parte2.md](fluxo_teste_parte2.md).
+
 ```sh
 # 1. Testes
 cargo test --locked

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::{
-    ast::{Command, Contract, Function, Span, Type, Value},
+    ast::{Command, Comparator, Condition, Contract, Function, Span, Type, Value},
     symbol_table::SymbolTable,
 };
 
@@ -94,6 +94,15 @@ fn verify_function(
 ) {
     let mut has_return = false;
 
+    if let Some(estado) = &function.quando {
+        if !symbols.contains_state(estado) {
+            errors.push(IRError::from_span(
+                &function.origem,
+                format!("estado '{}' não foi declarado", estado),
+            ));
+        }
+    }
+
     for action in &function.passos {
         match &action.comando {
             Command::Definir { destino, valor } => {
@@ -118,7 +127,8 @@ fn verify_function(
                 }
             }
 
-            Command::Somar { destino, valor } => {
+            Command::Somar { destino, valor }
+            | Command::Subtrair { destino, valor } => {
                 let Some(destination_type) = symbols.lookup(destino) else {
                     errors.push(IRError::from_span(
                         &action.origem,
@@ -134,7 +144,7 @@ fn verify_function(
                     errors.push(IRError::from_span(
                         &action.origem,
                         format!(
-                            "não é possível somar em '{}' porque ela não é do tipo numero",
+                            "não é possível alterar '{}' aritmeticamente porque ela não é do tipo numero",
                             destino
                         ),
                     ));
@@ -147,6 +157,38 @@ fn verify_function(
                     &action.origem,
                 ) {
                     errors.push(error);
+                }
+            }
+
+            Command::Exigir { condicao } => {
+                if let Err(error) =
+                    verify_condition(condicao, symbols, &action.origem)
+                {
+                    errors.push(error);
+                }
+            }
+
+            Command::Transferir { valor, destino } => {
+                for (value, expected) in
+                    [(valor, Type::Numero), (destino, Type::Endereco)]
+                {
+                    if let Err(error) = verify_value_type(
+                        value,
+                        &expected,
+                        symbols,
+                        &action.origem,
+                    ) {
+                        errors.push(error);
+                    }
+                }
+            }
+
+            Command::MudarEstado { estado } => {
+                if !symbols.contains_state(estado) {
+                    errors.push(IRError::from_span(
+                        &action.origem,
+                        format!("estado '{}' não foi declarado", estado),
+                    ));
                 }
             }
 
@@ -191,43 +233,91 @@ fn verify_function(
     }
 }
 
+fn verify_condition(
+    condicao: &Condition,
+    symbols: &SymbolTable,
+    span: &Span,
+) -> Result<(), IRError> {
+    match condicao {
+        Condition::Valor { valor } => {
+            verify_value_type(valor, &Type::Logico, symbols, span)
+        }
+
+        Condition::Comparacao {
+            esquerda,
+            operador,
+            direita,
+        } => {
+            match operador {
+                Comparator::Igual | Comparator::Diferente => {
+                    let left_type = value_type(esquerda, symbols, span)?;
+                    let right_type = value_type(direita, symbols, span)?;
+                    // Um literal de texto comparado a um endereco é lido como endereco.
+                    let expected = if right_type == Type::Endereco {
+                        right_type
+                    } else {
+                        left_type
+                    };
+                    verify_value_type(esquerda, &expected, symbols, span)?;
+                    verify_value_type(direita, &expected, symbols, span)
+                }
+                _ => {
+                    verify_value_type(esquerda, &Type::Numero, symbols, span)?;
+                    verify_value_type(direita, &Type::Numero, symbols, span)
+                }
+            }
+        }
+    }
+}
+
+/// Tipo de um valor; referências são resolvidas pela tabela de símbolos.
+pub fn value_type(
+    value: &Value,
+    symbols: &SymbolTable,
+    span: &Span,
+) -> Result<Type, IRError> {
+    match value {
+        Value::Numero(_) => Ok(Type::Numero),
+        Value::Texto(_) => Ok(Type::Texto),
+        Value::Logico(_) => Ok(Type::Logico),
+        Value::Referencia(name) => symbols.lookup(name).cloned().ok_or_else(|| {
+            IRError::from_span(
+                span,
+                format!("variável '{}' não foi declarada", name),
+            )
+        }),
+    }
+}
+
 fn verify_value_type(
     value: &Value,
     expected_type: &Type,
     symbols: &SymbolTable,
     span: &Span,
 ) -> Result<(), IRError> {
-    let actual_type = match value {
-        Value::Numero(_) => Type::Numero,
-
-        Value::Texto(_) => Type::Texto,
-
-        Value::Logico(_) => Type::Logico,
-
-        Value::Referencia(name) => {
-            let Some(tipo) = symbols.lookup(name) else {
-                return Err(IRError::from_span(
-                    span,
-                    format!(
-                        "variável '{}' não foi declarada",
-                        name
-                    ),
-                ));
-            };
-
-            return verify_compatible_types(
-                tipo,
-                expected_type,
+    // Literais de endereco chegam como texto e precisam ter o formato EVM.
+    if let (Value::Texto(text), Type::Endereco) = (value, expected_type) {
+        if !is_address_literal(text) {
+            return Err(IRError::from_span(
                 span,
-            );
+                format!(
+                    "endereço inválido \"{}\": esperado 0x seguido de 40 dígitos hexadecimais",
+                    text
+                ),
+            ));
         }
-    };
+        return Ok(());
+    }
 
-    verify_compatible_types(
-        &actual_type,
-        expected_type,
-        span,
-    )
+    let actual_type = value_type(value, symbols, span)?;
+
+    verify_compatible_types(&actual_type, expected_type, span)
+}
+
+pub fn is_address_literal(text: &str) -> bool {
+    text.len() == 42
+        && text.starts_with("0x")
+        && text[2..].chars().all(|c| c.is_ascii_hexdigit())
 }
 
 fn verify_compatible_types(
@@ -235,14 +325,7 @@ fn verify_compatible_types(
     expected_type: &Type,
     span: &Span,
 ) -> Result<(), IRError> {
-    // No parser atual, valores do tipo endereco são
-    // representados como Value::Texto.
-    let compatible = match (actual_type, expected_type) {
-        (Type::Texto, Type::Endereco) => true,
-        _ => actual_type == expected_type,
-    };
-
-    if compatible {
+    if actual_type == expected_type {
         Ok(())
     } else {
         Err(IRError::from_span(

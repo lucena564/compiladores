@@ -1,0 +1,25 @@
+# Cofre com saques fixos, máquina de estados e padrão Checks-Effects-Interactions.
+contrato: Cofre
+estados:
+  - Aberto
+  - Encerrado
+variaveis:
+  saldo: numero = 1000
+  saques: numero = 0
+  dono: endereco = "0x1111111111111111111111111111111111111111"
+funcoes:
+  sacar:
+    quando: Aberto
+    passos:
+      - exigir saldo maior que 0
+      - somar 1 em saques
+      - subtrair 100 de saldo
+      - transferir 100 para dono
+  encerrar:
+    quando: Aberto
+    passos:
+      - mudar para Encerrado
+  consultar_saldo:
+    retorna: numero
+    passos:
+      - retornar saldo

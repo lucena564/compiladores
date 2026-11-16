@@ -1,12 +1,16 @@
-# Contrato Simples — etapa 1
+# Contrato Simples — etapas 1 e 2
 
 Contrato Simples é uma linguagem declarativa em português, com estrutura visual
 semelhante a YAML, destinada à especificação simplificada de contratos. O front-end
 em Rust reconhece arquivos `.contrato` e produz uma árvore sintática abstrata
-(AST), exportada em JSON. A geração de Solidity pertence às etapas posteriores.
+(AST), exportada em JSON. O middle-end analisa essa árvore em passes isolados
+(tipagem, máquina de estados, Checks-Effects-Interactions, reentrância e
+tratamento de erros) e emite uma IR validada. A geração de Solidity pertence à
+etapa 3.
 
-A [fundamentação e análise de conformidade](docs/etapa-1.md) apresenta o planejamento,
-o contrato da AST e a comparação com o relatório de referência.
+A [fundamentação da etapa 1](docs/etapa-1.md) apresenta o planejamento, o contrato
+da AST e a comparação com o relatório de referência. A
+[documentação da etapa 2](docs/parte2.md) descreve o middle-end.
 
 ```yaml
 contrato: Contador
@@ -30,6 +34,8 @@ baixa as dependências; `Cargo.lock` registra as versões utilizadas.
 ```sh
 cargo run -- examples/contador.contrato
 cargo run -- examples/cadastro.contrato
+cargo run -- --ir examples/cofre.contrato                    # middle-end: IR validada
+cargo run -- --ir examples/invalidos/reentrancia.contrato    # erro semântico
 cargo test --locked
 ```
 
@@ -56,8 +62,16 @@ o código de saída antes de consumir a AST.
 | Atribuição | `- definir nome como valor` |
 | Soma | `- somar valor em nome` |
 | Retorno | `- retornar valor` |
+| Estados, opcional | `estados:` seguido de `  - Nome`; o primeiro é o inicial |
+| Guarda de estado, opcional | `quando: Estado`, antes de `retorna` |
+| Subtração | `- subtrair valor de nome` |
+| Verificação | `- exigir valor` ou `- exigir valor comparador valor` |
+| Transferência | `- transferir valor para endereco` |
+| Transição | `- mudar para Estado` |
 
-- Seções na ordem `contrato`, `variaveis` (opcional), `funcoes`.
+- Comparadores: `igual a`, `diferente de`, `maior que`, `menor que`,
+  `maior ou igual a`, `menor ou igual a`.
+- Seções na ordem `contrato`, `estados` (opcional), `variaveis` (opcional), `funcoes`.
 - Pelo menos uma função e um passo por função. Se presente, `variaveis` exige uma declaração.
 - Indentação: declarações/funções com 2 espaços; `retorna`/`passos` com 4; comandos com 6.
 - Identificadores: letras ASCII ou `_` no início; depois letras, dígitos ou `_`.
@@ -68,7 +82,7 @@ o código de saída antes de consumir a AST.
   `\"`, `\\`, `\n`, `\r`, `\t`.
 - Comentários começam com `#` fora de textos; linhas vazias são aceitas.
 - Quebras LF e CRLF são aceitas, inclusive última linha sem quebra.
-- Sem parâmetros, expressões aritméticas gerais, condições, laços ou chamadas externas.
+- Sem parâmetros, expressões aritméticas gerais, desvios condicionais ou laços.
 
 A linguagem utiliza gramática própria e um vocabulário formal restrito. A
 semelhança visual com YAML não implica compatibilidade com seus recursos gerais,
@@ -81,17 +95,20 @@ como âncoras, aliases, tags ou estruturas arbitrárias.
 | `src/grammar.pest` | Vocabulário e gramática; gera o parser |
 | `src/lib.rs` | Entrada pública e construção da AST |
 | `src/ast.rs` | Estruturas sintáticas compartilhadas |
+| `src/symbol_table.rs` | Tabela de símbolos (variáveis e estados) |
+| `src/verify.rs` | `verify_ir`: resolução de nomes e tipagem da AST |
+| `src/middle/` | Middle-end: IR, rebaixamento, passes e validação |
 | `src/main.rs` | CLI de leitura de arquivo e saída JSON |
-| `examples/` | Contador e cadastro |
-| `tests/frontend.rs` | Testes do front-end |
-| `docs/etapa-1.md` | Análise, planejamento e limites da entrega |
+| `examples/` | Contador, cadastro, cofre e exemplos inválidos |
+| `tests/` | Testes do front-end, da IR e do middle-end |
+| `docs/etapa-1.md` | Análise, planejamento e limites da etapa 1 |
+| `docs/parte2.md` | Middle-end: passes, regras e decisões da etapa 2 |
+| `docs/fluxo_teste_parte2.md` | Roteiro de teste manual do middle-end |
 
 A aceitação sintática indica conformidade com a estrutura da linguagem. Referências
-inexistentes, declarações duplicadas e incompatibilidades de tipos ainda podem
-estar presentes na AST e dependem de análise semântica posterior.
+inexistentes, declarações duplicadas, incompatibilidades de tipos e violações de
+segurança são detectadas pelo middle-end (`--ir`), não pelo parser.
 
 O parser é gerado automaticamente com Pest, que reúne reconhecimento léxico e
 sintático em uma gramática PEG. Essa escolha adapta a previsão do relatório de
-um scanner por expressões regulares e de uma gramática livre de contexto. A
-tabela de símbolos, o passe `VerifyIR()` e as verificações de segurança ainda
-não estão implementados; a comparação detalhada está no documento teórico.
+um scanner por expressões regulares e de uma gramática livre de contexto.

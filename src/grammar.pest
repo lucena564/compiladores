@@ -1,14 +1,22 @@
 // Sem WHITESPACE implícito: espaços e quebras fazem parte da linguagem.
-document = { SOI ~ blank* ~ contract ~ variables? ~ functions ~ EOI }
+document = { SOI ~ blank* ~ contract ~ states? ~ variables? ~ functions ~ EOI }
 contract = { "contrato:" ~ sp ~ identifier ~ end }
+states = { "estados:" ~ end ~ state+ }
+state = { "  - " ~ identifier ~ end }
 variables = { "variaveis:" ~ end ~ variable+ }
 variable = { "  " ~ identifier ~ ":" ~ sp ~ kind ~ sp ~ "=" ~ sp ~ value ~ end }
 functions = { "funcoes:" ~ end ~ function+ }
-function = { "  " ~ identifier ~ ":" ~ end ~ return_type? ~ "    passos:" ~ end ~ action+ }
+function = { "  " ~ identifier ~ ":" ~ end ~ guard? ~ return_type? ~ "    passos:" ~ end ~ action+ }
+guard = { "    quando:" ~ sp ~ identifier ~ end }
 return_type = { "    retorna:" ~ sp ~ kind ~ end }
-action = { "      - " ~ (assign | add | return_value) ~ end }
+action = { "      - " ~ (assign | add | subtract | require | transfer | transition | return_value) ~ end }
 assign = { "definir " ~ identifier ~ " como " ~ value }
 add = { "somar " ~ value ~ " em " ~ identifier }
+subtract = { "subtrair " ~ value ~ " de " ~ identifier }
+require = { "exigir " ~ value ~ (" " ~ comparator ~ " " ~ value)? }
+comparator = { "maior ou igual a" | "menor ou igual a" | "maior que" | "menor que" | "igual a" | "diferente de" }
+transfer = { "transferir " ~ value ~ " para " ~ value }
+transition = { "mudar para " ~ identifier }
 return_value = { "retornar " ~ value }
 kind = @{ ("numero" | "texto" | "logico" | "endereco") ~ !ident_char }
 value = _{ string | boolean | number | identifier }
@@ -18,7 +26,8 @@ string = @{ "\"" ~ ("\\" ~ ("\"" | "\\" | "n" | "r" | "t") | !("\"" | "\\" | con
 control = _{ '\u{0000}'..'\u{001F}' }
 identifier = @{ !(reserved ~ !ident_char) ~ (ASCII_ALPHA | "_") ~ ident_char* }
 ident_char = _{ ASCII_ALPHANUMERIC | "_" }
-reserved = _{ "contrato" | "variaveis" | "funcoes" | "retorna" | "passos" | "definir" | "como" | "somar" | "em" | "retornar" | "numero" | "texto" | "logico" | "endereco" | "verdadeiro" | "falso" }
+// Escolha ordenada: palavras que são prefixo de outras ("retorna" de "retornar") vêm depois.
+reserved = _{ "contrato" | "estados" | "variaveis" | "funcoes" | "quando" | "retornar" | "retorna" | "passos" | "definir" | "como" | "somar" | "em" | "subtrair" | "exigir" | "transferir" | "mudar" | "numero" | "texto" | "logico" | "endereco" | "verdadeiro" | "falso" }
 sp = _{ " "+ }
 comment = _{ "#" ~ (!("\n" | "\r") ~ ANY)* }
 newline = _{ "\r\n" | "\n" }
